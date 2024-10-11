@@ -1,9 +1,15 @@
 package main
 
 import (
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
+	"net/http"
 	"os"
 	"url-shortnener/internal/config"
+	"url-shortnener/internal/http-server/handlers/url/save"
+	myLogger "url-shortnener/internal/http-server/middleware/logger"
+	"url-shortnener/internal/lib/logger/handlers/slogpretty"
 	"url-shortnener/internal/lib/logger/sl"
 	"url-shortnener/internal/storage/sqlite"
 )
@@ -21,43 +27,49 @@ func main() {
 	log := setupLogger(cfg.Env)
 	log.Info("starting url-shortener", slog.String("env", cfg.Env))
 	log.Debug("debug message are enabled")
-	// TODO init storage: sqlite
+	log.Error("error message are enabled")
+
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
 		log.Error("failed to initialize storage", sl.Err(err))
 		os.Exit(1)
 	}
-	url, err := storage.GetURL("google")
-	if err != nil {
-		log.Error("failed to fetch google", sl.Err(err))
-		os.Exit(1)
-	}
-	log.Info("fetched url", slog.String("url", url))
 
-	url, err = storage.GetURL("google")
-	if err != nil {
-		log.Error("failed to fetch google", sl.Err(err))
-		os.Exit(1)
-	}
-	log.Info("fetched url", slog.String("url", url))
-
-	err = storage.DeleteURL("google")
-	if err != nil {
-		log.Error("failed to delete google", sl.Err(err))
-		os.Exit(1)
-	}
-	log.Info("Delete google")
 	_ = storage
-	// TODO: init router: chi, "chi render"
 
+	router := chi.NewRouter()
+
+	// middleware
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(myLogger.New(log))
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.URLFormat)
+
+	router.Post("/url", save.New(log, storage))
+
+	log.Info("starting server", slog.String("address", cfg.Address))
 	// TODO: run server
+	srv := &http.Server{
+		Addr:         cfg.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
+	}
+
+	if err := srv.ListenAndServe(); err != nil {
+		log.Error("failed to start server", sl.Err(err))
+	}
+
+	log.Error("server stopped")
 }
 
 func setupLogger(env string) *slog.Logger {
 	var log *slog.Logger
 	switch env {
 	case envLocal:
-		log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		log = setupPrettySlog()
 	case envDev:
 		log = slog.New(
 			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
@@ -68,4 +80,16 @@ func setupLogger(env string) *slog.Logger {
 		)
 	}
 	return log
+}
+
+func setupPrettySlog() *slog.Logger {
+	opts := slogpretty.PrettyHandlerOptions{
+		SlogOpts: &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		},
+	}
+
+	handler := opts.NewPrettyHandler(os.Stdout)
+
+	return slog.New(handler)
 }
