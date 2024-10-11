@@ -1,4 +1,4 @@
-package redirect
+package delete
 
 import (
 	"errors"
@@ -12,13 +12,20 @@ import (
 	"url-shortnener/internal/storage"
 )
 
-type URLGetter interface {
-	GetURL(alias string) (string, error)
+type URLDeleter interface {
+	DeleteURL(alias string) error
 }
 
-func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
+// TODO: implement Url field
+type Response struct {
+	resp.Response
+	Alias string
+	//Url string
+}
+
+func New(log *slog.Logger, urlDeleter URLDeleter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handler.redirect.urlGetter.GetURL"
+		const op = "handler.delete.URLDeleter"
 
 		log = log.With(
 			slog.String("op", op),
@@ -33,23 +40,28 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 			return
 		}
 
-		resURL, err := urlGetter.GetURL(alias)
+		err := urlDeleter.DeleteURL(alias)
 		if errors.Is(err, storage.ErrURLNotFound) {
 			log.Info("url not found", "alias", alias)
+
 			render.JSON(w, r, resp.Error("not found"))
 			return
 		}
-
 		if err != nil {
-			log.Error("failed to get url", sl.Err(err))
+			log.Error("failed to delete url", sl.Err(err))
 
 			render.JSON(w, r, resp.Error("internal error"))
 			return
 		}
 
-		log.Info("got url", slog.String("url", resURL))
-
-		http.Redirect(w, r, resURL, http.StatusFound)
-
+		log.Info("url deleted", slog.String("alias", alias))
+		responseOk(w, r, alias)
 	}
+}
+
+func responseOk(w http.ResponseWriter, r *http.Request, alias string) {
+	render.JSON(w, r, Response{
+		Response: resp.OK(),
+		Alias:    alias,
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"url-shortnener/internal/config"
+	deleter "url-shortnener/internal/http-server/handlers/delete"
 	"url-shortnener/internal/http-server/handlers/redirect"
 	"url-shortnener/internal/http-server/handlers/url/save"
 	myLogger "url-shortnener/internal/http-server/middleware/logger"
@@ -28,7 +29,6 @@ func main() {
 	log := setupLogger(cfg.Env)
 	log.Info("starting url-shortener", slog.String("env", cfg.Env))
 	log.Debug("debug message are enabled")
-	log.Error("error message are enabled")
 
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
@@ -49,6 +49,7 @@ func main() {
 
 	router.Post("/url", save.New(log, storage))
 	router.Get("/{alias}", redirect.New(log, storage))
+	router.Delete("/url/{alias}", deleter.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 	// TODO: run server
