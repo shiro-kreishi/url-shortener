@@ -27,21 +27,26 @@ func main() {
 		log.Error("failed to initialize storage", sl.Err(err))
 		os.Exit(1)
 	}
-
-	id, err := storage.SaveURL("https://google.com", "google")
+	url, err := storage.GetURL("google")
 	if err != nil {
-		log.Error("failed to save url", sl.Err(err))
+		log.Error("failed to fetch google", sl.Err(err))
 		os.Exit(1)
 	}
-	log.Info("saved url", slog.Int64("id", id))
+	log.Info("fetched url", slog.String("url", url))
 
-	id, err = storage.SaveURL("https://google.com", "google")
+	url, err = storage.GetURL("google")
 	if err != nil {
-		log.Error("failed to save url", sl.Err(err))
+		log.Error("failed to fetch google", sl.Err(err))
 		os.Exit(1)
 	}
-	log.Info("saved url", slog.Int64("id", id))
+	log.Info("fetched url", slog.String("url", url))
 
+	err = storage.DeleteURL("google")
+	if err != nil {
+		log.Error("failed to delete google", sl.Err(err))
+		os.Exit(1)
+	}
+	log.Info("Delete google")
 	_ = storage
 	// TODO: init router: chi, "chi render"
 
